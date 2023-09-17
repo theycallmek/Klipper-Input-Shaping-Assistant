@@ -33,9 +33,7 @@ def run_shaper(filename):
     # Draw graph
     calibrate_shaper.setup_matplotlib(None)
     fig = calibrate_shaper.plot_freq_response(args, calibration_data, shapers, selected_shaper, max_freq)
-    fig.tight_layout()
     fig.show()
-    # matplotlib.pyplot.show()
 
 
 def _exit():
