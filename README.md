@@ -10,3 +10,6 @@ Run it, select the CSV file you'd like to analyze, click the run button, the gra
 
 # 📦Download
 [Releases](https://github.com/theycallmek/Klipper-Input-Shaping-Assistant/releases)
+
+EXE packaged by pyinstaller. Build cmd:
+> pyinstaller main.py --onefile --add-data="extras/*;extras"
