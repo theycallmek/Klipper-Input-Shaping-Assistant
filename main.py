@@ -15,7 +15,7 @@ def browse_files():
         initialdir="/",
         title="Select a File",
         filetypes=(
-            ("CSV files", "*.csv*"),
+            ("CSV files", "*.csv"),
             ("all files", "*.*")
         )
     )
