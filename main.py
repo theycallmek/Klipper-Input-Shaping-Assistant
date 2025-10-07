@@ -35,14 +35,17 @@ def browse_files() -> None:
         button_run.configure(state="normal")
 
 
-def run_shaper(filename: str) -> None:
+def perform_calibration(filename: str) -> Tuple[Any, Any, Any]:
     """
-    Runs the shaper calibration process on the given file.
+    Runs the shaper calibration calculations on the given file.
+    This function contains no GUI code and is safe to run in a thread.
 
     Args:
         filename (str): The path to the CSV file to analyze.
+    Returns:
+        A tuple containing the calibration data, shaper data, and the
+        name of the selected shaper.
     """
-    max_freq: int = 200
     # Parse data
     args: List[str] = [f'{filename}']
     datas: List[Union[np.ndarray, Any]] = [calibrate_shaper.parse_log(fn) for fn in args]
@@ -51,6 +54,13 @@ def run_shaper(filename: str) -> None:
     shapers: Any
     calibration_data: Any
     selected_shaper, shapers, calibration_data = calibrate_shaper.calibrate_shaper(datas, None, None)
+    return calibration_data, shapers, selected_shaper
+
+
+def create_and_show_plot(calibration_data: Any, shapers: Any, selected_shaper: str, filename: str) -> None:
+    """Creates and displays the Matplotlib plot. Must be run on the main thread."""
+    max_freq: int = 200
+    args: List[str] = [f'{filename}']
     # Draw graph
     calibrate_shaper.setup_matplotlib(None)
     fig: Figure = calibrate_shaper.plot_freq_response(args, calibration_data, shapers, selected_shaper, max_freq)
@@ -74,14 +84,19 @@ def run_shaper_threaded() -> None:
     def task() -> None:
         """The actual task to be run in the thread."""
         try:
-            run_shaper(filepath)
+            # 1. Perform heavy computation in the background thread
+            calibration_data, shapers, selected_shaper = perform_calibration(filepath)
+            # 2. Schedule the GUI-related plotting to be done on the main thread
+            window.after(0, lambda: create_and_show_plot(
+                calibration_data, shapers, selected_shaper, filepath))
         except Exception as e:
             print(f"An error occurred: {e}")
             # Update the GUI to show the error
-            label_file_explorer.configure(text=f"Error: {e}")
+            # Use `after` to ensure this GUI update is thread-safe
+            window.after(0, lambda: label_file_explorer.configure(text=f"Error: {e}"))
         finally:
-            # Re-enable the run button
-            button_run.configure(state="normal", text="Run")
+            # Re-enable the run button on the main thread
+            window.after(0, lambda: button_run.configure(state="normal", text="Run"))
 
     # Create and start the thread
     thread: threading.Thread = threading.Thread(target=task)
