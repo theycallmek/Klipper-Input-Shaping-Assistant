@@ -9,11 +9,26 @@ import threading
 from typing import List, Any, Tuple, Union
 from matplotlib.figure import Figure
 import numpy as np
+import queue
+import contextlib
+import io
 
 # Use TkAgg backend
 matplotlib.use('TkAgg')
 customtkinter.set_appearance_mode("dark")  # Modes: "System" (standard), "Dark", "Light"
 customtkinter.set_default_color_theme("blue")  # Themes: "blue" (standard), "green", "dark-blue"
+
+
+class QueueIO(io.TextIOBase):
+    """
+    A file-like object that writes to a queue. Used to redirect stdout.
+    """
+    def __init__(self, q: queue.Queue):
+        self.q = q
+
+    def write(self, s: str) -> int:
+        self.q.put(s)
+        return len(s.encode('utf-8'))
 
 
 def browse_files() -> None:
@@ -35,17 +50,14 @@ def browse_files() -> None:
         button_run.configure(state="normal")
 
 
-def perform_calibration(filename: str) -> Tuple[Any, Any, Any]:
+def run_shaper(filename: str) -> None:
     """
-    Runs the shaper calibration calculations on the given file.
-    This function contains no GUI code and is safe to run in a thread.
+    Runs the shaper calibration process on the given file.
 
     Args:
         filename (str): The path to the CSV file to analyze.
-    Returns:
-        A tuple containing the calibration data, shaper data, and the
-        name of the selected shaper.
     """
+    max_freq: int = 200
     # Parse data
     args: List[str] = [f'{filename}']
     datas: List[Union[np.ndarray, Any]] = [calibrate_shaper.parse_log(fn) for fn in args]
@@ -54,13 +66,6 @@ def perform_calibration(filename: str) -> Tuple[Any, Any, Any]:
     shapers: Any
     calibration_data: Any
     selected_shaper, shapers, calibration_data = calibrate_shaper.calibrate_shaper(datas, None, None)
-    return calibration_data, shapers, selected_shaper
-
-
-def create_and_show_plot(calibration_data: Any, shapers: Any, selected_shaper: str, filename: str) -> None:
-    """Creates and displays the Matplotlib plot. Must be run on the main thread."""
-    max_freq: int = 200
-    args: List[str] = [f'{filename}']
     # Draw graph
     calibrate_shaper.setup_matplotlib(None)
     fig: Figure = calibrate_shaper.plot_freq_response(args, calibration_data, shapers, selected_shaper, max_freq)
@@ -79,28 +84,55 @@ def run_shaper_threaded() -> None:
         label_file_explorer.configure(text="Please select a file first!")
         return
 
+    # Clear the output textbox
+    output_textbox.configure(state="normal")
+    output_textbox.delete("1.0", "end")
+    output_textbox.configure(state="disabled")
+
     button_run.configure(state="disabled", text="Running Calibration...")
+    q = queue.Queue()
+    q_io = QueueIO(q)
 
     def task() -> None:
         """The actual task to be run in the thread."""
         try:
-            # 1. Perform heavy computation in the background thread
-            calibration_data, shapers, selected_shaper = perform_calibration(filepath)
-            # 2. Schedule the GUI-related plotting to be done on the main thread
-            window.after(0, lambda: create_and_show_plot(
-                calibration_data, shapers, selected_shaper, filepath))
+            with contextlib.redirect_stdout(q_io):
+                run_shaper(filepath)
         except Exception as e:
+            # Also print exceptions to the queue
             print(f"An error occurred: {e}")
-            # Update the GUI to show the error
-            # Use `after` to ensure this GUI update is thread-safe
-            window.after(0, lambda: label_file_explorer.configure(text=f"Error: {e}"))
         finally:
-            # Re-enable the run button on the main thread
-            window.after(0, lambda: button_run.configure(state="normal", text="Run"))
+            # Signal that the task is done
+            q.put(None)
 
     # Create and start the thread
     thread: threading.Thread = threading.Thread(target=task)
     thread.start()
+    # Start processing the queue
+    process_queue(q)
+
+
+def process_queue(q: queue.Queue) -> None:
+    """
+    Processes the queue of messages from the background thread and updates
+    the GUI.
+    """
+    try:
+        message = q.get_nowait()
+        if message is None:
+            # Task is done, re-enable the run button
+            button_run.configure(state="normal", text="Run")
+            return
+        else:
+            # Insert the message into the textbox
+            output_textbox.configure(state="normal")
+            output_textbox.insert("end", message)
+            output_textbox.configure(state="disabled")
+    except queue.Empty:
+        pass  # Queue is empty, do nothing
+
+    # Check again after 100ms
+    window.after(100, lambda: process_queue(q))
 
 
 def _exit() -> None:
@@ -111,7 +143,7 @@ def _exit() -> None:
 # GUI root window
 window: customtkinter.CTk = customtkinter.CTk()
 window.title("Shaper Calibration Assistant by RoyalT")
-window.geometry("500x250")
+window.geometry("700x500")
 
 # Labels and buttons
 label_file_explorer: customtkinter.CTkLabel = customtkinter.CTkLabel(
@@ -129,11 +161,21 @@ button_run: customtkinter.CTkButton = customtkinter.CTkButton(
 )
 button_run.configure(state="disabled")
 
+# Output Textbox
+output_textbox: customtkinter.CTkTextbox = customtkinter.CTkTextbox(
+    window,
+    width=660,
+    height=300,
+    state="disabled"  # Start as read-only
+)
+
 # Grid
-label_file_explorer.grid(row=0, column=0, padx=20, pady=20, columnspan=2)
+label_file_explorer.grid(row=0, column=0, padx=20, pady=10, columnspan=2)
 button_explore.grid(row=1, column=0, padx=20, pady=10)
 button_run.grid(row=1, column=1, padx=20, pady=10)
-button_exit.grid(row=2, column=0, padx=20, pady=10, columnspan=2)
+output_textbox.grid(row=2, column=0, padx=20, pady=10, columnspan=2)
+button_exit.grid(row=3, column=0, padx=20, pady=10, columnspan=2)
+
 
 # Drive it like you stole it
 window.mainloop()
