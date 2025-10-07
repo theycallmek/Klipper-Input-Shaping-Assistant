@@ -52,15 +52,17 @@ def browse_files() -> None:
         button_run.configure(state="normal")
 
 
-def run_shaper(filename: str) -> Figure:
+def run_shaper(filename: str) -> Tuple[List[str], Any, Any, str, int]:
     """
-    Runs the shaper calibration process on the given file.
+    Runs the shaper calibration process on the given file and returns the
+    data needed for plotting.
 
     Args:
         filename (str): The path to the CSV file to analyze.
 
     Returns:
-        Figure: The matplotlib figure containing the plot.
+        A tuple containing the data needed for plotting:
+        (args, calibration_data, shapers, selected_shaper, max_freq)
     """
     max_freq: int = 200
     # Parse data
@@ -71,10 +73,20 @@ def run_shaper(filename: str) -> Figure:
     shapers: Any
     calibration_data: Any
     selected_shaper, shapers, calibration_data = calibrate_shaper.calibrate_shaper(datas, None, None)
-    # Draw graph
+    return args, calibration_data, shapers, selected_shaper, max_freq
+
+
+def create_and_show_plot(plot_data: Tuple[List[str], Any, Any, str, int]) -> None:
+    """
+    Creates and shows the matplotlib plot on the main thread.
+
+    Args:
+        plot_data (Tuple): A tuple containing the data needed for plotting.
+    """
+    args, calibration_data, shapers, selected_shaper, max_freq = plot_data
     calibrate_shaper.setup_matplotlib(None)
     fig: Figure = calibrate_shaper.plot_freq_response(args, calibration_data, shapers, selected_shaper, max_freq)
-    return fig
+    fig.show()
 
 
 def run_shaper_threaded() -> None:
@@ -101,10 +113,11 @@ def run_shaper_threaded() -> None:
     def task() -> None:
         """The actual task to be run in the thread."""
         try:
+            # Run the data processing in the background
             with contextlib.redirect_stdout(q_io):
-                fig = run_shaper(filepath)
-            # Pass the figure to the main thread for showing
-            q.put(fig)
+                plot_data = run_shaper(filepath)
+            # Pass the plot data to the main thread
+            q.put(plot_data)
         except Exception as e:
             # Also print exceptions to the queue
             print(f"An error occurred: {e}")
@@ -128,11 +141,11 @@ def process_queue(q: queue.Queue) -> None:
         message = q.get_nowait()
         if message is None:
             # Task is done, re-enable the run button
-            button_run.configure(state="normal", text="Run")
+            button_run.configure(state="normal", text="🚀 Run Calibration")
             return
-        elif isinstance(message, Figure):
-            # If the message is a figure, show it
-            message.show()
+        elif isinstance(message, tuple):
+            # If the message is a tuple, it's our plot data
+            create_and_show_plot(message)
         else:
             # Otherwise, it's a string, so insert it into the textbox
             output_textbox.configure(state="normal")
