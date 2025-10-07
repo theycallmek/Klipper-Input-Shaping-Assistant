@@ -34,7 +34,7 @@ If you want to build the application yourself, follow these steps:
 2.  **Install dependencies:**
     Make sure you have Python installed. Then, install the required packages using pip:
     ```bash
-    pip install customtkinter numpy matplotlib
+    pip install -r requirements.txt
     ```
 3.  **Run the application:**
     ```bash
