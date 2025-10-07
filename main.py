@@ -12,11 +12,13 @@ import numpy as np
 import queue
 import contextlib
 import io
+import pyperclip
+
+from theme import CatppuccinMocha
 
 # Use TkAgg backend
 matplotlib.use('TkAgg')
 customtkinter.set_appearance_mode("dark")  # Modes: "System" (standard), "Dark", "Light"
-customtkinter.set_default_color_theme("blue")  # Themes: "blue" (standard), "green", "dark-blue"
 
 
 class QueueIO(io.TextIOBase):
@@ -50,12 +52,15 @@ def browse_files() -> None:
         button_run.configure(state="normal")
 
 
-def run_shaper(filename: str) -> None:
+def run_shaper(filename: str) -> Figure:
     """
     Runs the shaper calibration process on the given file.
 
     Args:
         filename (str): The path to the CSV file to analyze.
+
+    Returns:
+        Figure: The matplotlib figure containing the plot.
     """
     max_freq: int = 200
     # Parse data
@@ -69,7 +74,7 @@ def run_shaper(filename: str) -> None:
     # Draw graph
     calibrate_shaper.setup_matplotlib(None)
     fig: Figure = calibrate_shaper.plot_freq_response(args, calibration_data, shapers, selected_shaper, max_freq)
-    fig.show()
+    return fig
 
 
 def run_shaper_threaded() -> None:
@@ -97,7 +102,9 @@ def run_shaper_threaded() -> None:
         """The actual task to be run in the thread."""
         try:
             with contextlib.redirect_stdout(q_io):
-                run_shaper(filepath)
+                fig = run_shaper(filepath)
+            # Pass the figure to the main thread for showing
+            q.put(fig)
         except Exception as e:
             # Also print exceptions to the queue
             print(f"An error occurred: {e}")
@@ -123,10 +130,13 @@ def process_queue(q: queue.Queue) -> None:
             # Task is done, re-enable the run button
             button_run.configure(state="normal", text="Run")
             return
+        elif isinstance(message, Figure):
+            # If the message is a figure, show it
+            message.show()
         else:
-            # Insert the message into the textbox
+            # Otherwise, it's a string, so insert it into the textbox
             output_textbox.configure(state="normal")
-            output_textbox.insert("end", message)
+            output_textbox.insert("end", str(message))
             output_textbox.configure(state="disabled")
     except queue.Empty:
         pass  # Queue is empty, do nothing
@@ -140,42 +150,102 @@ def _exit() -> None:
     exit()
 
 
+def copy_to_clipboard() -> None:
+    """
+    Copies the content of the output textbox to the clipboard.
+    """
+    text_to_copy = output_textbox.get("1.0", "end-1c")
+    if not text_to_copy:
+        return  # Don't do anything if there's nothing to copy
+    pyperclip.copy(text_to_copy)
+    # Provide user feedback
+    button_copy.configure(text="✅ Copied!")
+    window.after(2000, lambda: button_copy.configure(text="📋 Copy Output"))
+
+
 # GUI root window
 window: customtkinter.CTk = customtkinter.CTk()
-window.title("Shaper Calibration Assistant by RoyalT")
-window.geometry("700x500")
+window.title("Shaper Calibration Assistant")
+window.geometry("700x550")
+window.configure(fg_color=CatppuccinMocha.BASE)
 
-# Labels and buttons
+# --- Configure grid layout for responsiveness ---
+# Make columns expand equally
+window.grid_columnconfigure(0, weight=1)
+window.grid_columnconfigure(1, weight=1)
+# Make the textbox row expand vertically
+window.grid_rowconfigure(2, weight=1)
+
+# --- Create Widgets ---
 label_file_explorer: customtkinter.CTkLabel = customtkinter.CTkLabel(
     window,
-    text="Select a CSV file to run shaper calibration on",
-    width=100,
-    height=4,
+    text="Select a resonance data file (.csv) to begin",
+    text_color=CatppuccinMocha.TEXT,
+    font=("Arial", 14, "bold"),
 )
-button_explore: customtkinter.CTkButton = customtkinter.CTkButton(window, text="Select CSV File", command=browse_files)
-button_exit: customtkinter.CTkButton = customtkinter.CTkButton(window, text="Exit", command=_exit)
+
+button_explore: customtkinter.CTkButton = customtkinter.CTkButton(
+    window,
+    text="📄 Select CSV",
+    command=browse_files,
+    fg_color=CatppuccinMocha.BLUE,
+    hover_color=CatppuccinMocha.SAPPHIRE,
+    text_color=CatppuccinMocha.BASE,
+    font=("Arial", 12, "bold")
+)
+
 button_run: customtkinter.CTkButton = customtkinter.CTkButton(
     window,
-    text="Run",
-    command=run_shaper_threaded
+    text="🚀 Run Calibration",
+    command=run_shaper_threaded,
+    fg_color=CatppuccinMocha.GREEN,
+    hover_color=CatppuccinMocha.TEAL,
+    text_color=CatppuccinMocha.BASE,
+    font=("Arial", 12, "bold")
 )
 button_run.configure(state="disabled")
 
-# Output Textbox
-output_textbox: customtkinter.CTkTextbox = customtkinter.CTkTextbox(
+button_copy: customtkinter.CTkButton = customtkinter.CTkButton(
     window,
-    width=660,
-    height=300,
-    state="disabled"  # Start as read-only
+    text="📋 Copy Output",
+    command=copy_to_clipboard,
+    fg_color=CatppuccinMocha.MAUVE,
+    hover_color=CatppuccinMocha.LAVENDER,
+    text_color=CatppuccinMocha.BASE,
+    font=("Arial", 12, "bold")
 )
 
-# Grid
-label_file_explorer.grid(row=0, column=0, padx=20, pady=10, columnspan=2)
-button_explore.grid(row=1, column=0, padx=20, pady=10)
-button_run.grid(row=1, column=1, padx=20, pady=10)
-output_textbox.grid(row=2, column=0, padx=20, pady=10, columnspan=2)
-button_exit.grid(row=3, column=0, padx=20, pady=10, columnspan=2)
+button_exit: customtkinter.CTkButton = customtkinter.CTkButton(
+    window,
+    text="🚪 Exit",
+    command=_exit,
+    fg_color=CatppuccinMocha.RED,
+    hover_color=CatppuccinMocha.MAROON,
+    text_color=CatppuccinMocha.BASE,
+    font=("Arial", 12, "bold")
+)
 
+output_textbox: customtkinter.CTkTextbox = customtkinter.CTkTextbox(
+    window,
+    state="disabled",
+    fg_color=CatppuccinMocha.MANTLE,
+    text_color=CatppuccinMocha.TEXT,
+    border_color=CatppuccinMocha.OVERLAY0,
+    border_width=2,
+    corner_radius=10,
+    font=("Consolas", 12)
+)
+
+# --- Place Widgets on Grid ---
+label_file_explorer.grid(row=0, column=0, padx=20, pady=(20, 10), columnspan=2)
+
+button_explore.grid(row=1, column=0, padx=(20, 10), pady=10, sticky="ew")
+button_run.grid(row=1, column=1, padx=(10, 20), pady=10, sticky="ew")
+
+output_textbox.grid(row=2, column=0, padx=20, pady=10, columnspan=2, sticky="nsew")
+
+button_copy.grid(row=3, column=0, padx=(20, 10), pady=10, sticky="ew")
+button_exit.grid(row=3, column=1, padx=(10, 20), pady=10, sticky="ew")
 
 # Drive it like you stole it
 window.mainloop()
