@@ -4,6 +4,9 @@
 
 This tool provides a simple graphical user interface (GUI) for the powerful `calibrate_shaper.py` script, allowing users to analyze resonance data from their 3D printers without needing to interact with the command line or a full Klipper installation.
 
+![app screenshot](app_screenshot.webp)
+
+
 ## ✨ Features
 
 - **Modern, User-Friendly Interface:** A clean and intuitive GUI that's easy to navigate.
