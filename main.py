@@ -72,7 +72,17 @@ def run_shaper(filename: str) -> Tuple[List[str], Any, Any, str, int]:
     selected_shaper: str
     shapers: Any
     calibration_data: Any
-    selected_shaper, shapers, calibration_data = calibrate_shaper.calibrate_shaper(datas, None, None)
+    selected_shaper, shapers, calibration_data = calibrate_shaper.calibrate_shaper(
+        datas,
+        None,  # csv_output
+        shapers=None,  # Let the calibrator choose the best shapers
+        damping_ratio=None,  # Use default damping ratio
+        scv=5.0,  # Square corner velocity (standard default)
+        shaper_freqs=[],  # No specific frequencies to test
+        max_smoothing=None,  # No smoothing limit
+        test_damping_ratios=None,  # Use default damping ratios
+        max_freq=max_freq  # Maximum frequency to analyze
+    )
     return args, calibration_data, shapers, selected_shaper, max_freq
 
 
